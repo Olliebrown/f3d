@@ -14,7 +14,6 @@
 #include "vtkF3DMetaImporter.h"
 #include "vtkF3DRenderer.h"
 
-#include <optional>
 #include <vtkCallbackCommand.h>
 #include <vtkLightCollection.h>
 #include <vtkMemoryResourceStream.h>
@@ -22,8 +21,11 @@
 #include <vtkProgressBarWidget.h>
 #include <vtkTimerLog.h>
 #include <vtkVersion.h>
+#include <vtkOBJImporter.h>
+#include <vtkSmartPointer.h>
 #include <vtksys/SystemTools.hxx>
 
+#include <optional>
 #include <vector>
 
 namespace fs = std::filesystem;
@@ -310,67 +312,120 @@ scene& scene_impl::add(const std::vector<fs::path>& filePaths)
 }
 
 //----------------------------------------------------------------------------
-scene& scene_impl::add(const std::byte* buffer, std::size_t size)
+scene& scene_impl::add(const std::byte* buffer, std::size_t size, std::string filename)
 {
-  if (buffer == nullptr || size == 0)
+  return this->add({ {buffer, size, filename} });
+}
+
+scene& scene_impl::add(std::vector<bufferTuple> buffers)
+{
+  // Assume they are all model buffers
+  return add(buffers, std::vector<bufferTuple>(), std::vector<bufferTuple>());
+}
+
+scene& scene_impl::add(std::vector<bufferTuple> modelBuffers,
+  std::vector<bufferTuple> materialBuffers, std::vector<bufferTuple> textureBuffers)
+{
+  // Make the material and textures streams (if any)
+  std::vector<vtkResourceStream*> materialStreams;
+  for (const bufferTuple& materialBufferInfo : materialBuffers)
   {
-    log::debug("Empty buffer or zero size when trying to load a buffer into the scene provided\n");
-    return *this;
+    vtkSmartPointer mtlStream = vtkMemoryResourceStream::New();
+    mtlStream->SetBuffer(std::get<0>(materialBufferInfo), std::get<1>(materialBufferInfo));
+    materialStreams.emplace_back(mtlStream);
   }
 
-  // Recover the appropriate reader
-  std::optional<std::string> forceReader = this->Internals->Options.scene.force_reader;
+  std::map<std::string, vtkResourceStream*> textureStreamMap;
+  for (const bufferTuple& textureBufferInfo : textureBuffers)
+  {
+    vtkSmartPointer texStream = vtkMemoryResourceStream::New();
+    texStream->SetBuffer(std::get<0>(textureBufferInfo), std::get<1>(textureBufferInfo));
+    textureStreamMap.emplace(std::get<2>(textureBufferInfo), texStream);
+  }
+
+  // Loop over the models
+  for (const bufferTuple& bufferInfo : modelBuffers)
+  {
+    // Extract individual parameters from ith tuple
+    const std::byte* buffer = std::get<0>(bufferInfo);
+    const size_t& size = std::get<1>(bufferInfo);
+    const std::string& filename = std::get<2>(bufferInfo);
+
+    // Check that buffer exists and is non-zero size
+    if (buffer == nullptr || size == 0)
+    {
+      log::debug("Empty buffer or zero size when trying to load a buffer into the scene provided\n");
+      continue;
+    }
+
+    // Recover the appropriate reader
+    std::optional<std::string> forceReader = this->Internals->Options.scene.force_reader;
 
 #if VTK_VERSION_NUMBER < VTK_VERSION_CHECK(9, 6, 20260128)
-  if (!forceReader)
-  {
-    throw scene::load_failure_exception(
-      "No force reader set while trying to load a buffer from memory");
-  }
+    if (!forceReader)
+    {
+      throw scene::load_failure_exception(
+        "No force reader set while trying to load a buffer from memory");
+    }
 #endif
 
-  const f3d::reader* reader = f3d::factory::instance()->getReader(buffer, size, forceReader);
-  if (reader)
-  {
-    if (forceReader)
+    const f3d::reader* reader = f3d::factory::instance()->getReader(buffer, size, forceReader);
+    if (reader)
     {
-      log::debug("Forcing reader ", (*forceReader), " for stream");
+      if (forceReader)
+      {
+        log::debug("Forcing reader ", (*forceReader), " for stream");
+      }
+      else
+      {
+        log::debug("Found a reader for stream:  \"", reader->getName(), "\"");
+      }
     }
     else
     {
-      log::debug("Found a reader for stream:  \"", reader->getName(), "\"");
+      if (forceReader)
+      {
+        throw scene::load_failure_exception(*forceReader + " is not a valid force reader");
+      }
+      throw scene::load_failure_exception("provided stream is not a file of a supported 3D scene "
+                                          "file format, use force reader to force a specific reader");
     }
-  }
-  else
-  {
-    if (forceReader)
+
+    vtkNew<vtkMemoryResourceStream> modelStream;
+    modelStream->SetBuffer(buffer, size);
+
+    vtkSmartPointer<vtkImporter> importer = reader->createSceneReader(modelStream);
+    if (!importer)
     {
-      throw scene::load_failure_exception(*forceReader + " is not a valid force reader");
+      auto vtkReader = reader->createGeometryReader(modelStream);
+
+      if (!vtkReader)
+      {
+        throw scene::load_failure_exception(reader->getName() + " does not support reading streams");
+      }
+
+      vtkNew<vtkF3DGenericImporter> genericImporter;
+      genericImporter->SetInternalReader(vtkReader);
+      importer = genericImporter;
     }
-    throw scene::load_failure_exception("provided stream is not a file of a supported 3D scene "
-                                        "file format, use force reader to force a specific reader");
-  }
-
-  vtkNew<vtkMemoryResourceStream> stream;
-  stream->SetBuffer(buffer, size);
-
-  vtkSmartPointer<vtkImporter> importer = reader->createSceneReader(stream);
-  if (!importer)
-  {
-    auto vtkReader = reader->createGeometryReader(stream);
-
-    if (!vtkReader)
+    else if (strcmp(importer->GetClassName(), "vtkOBJImporter") == 0)
     {
-      throw scene::load_failure_exception(reader->getName() + " does not support reading streams");
+      vtkOBJImporter* objImporter = vtkOBJImporter::SafeDownCast(importer);
+      if (materialStreams.size() > 0)
+      {
+        objImporter->SetMTLStream(materialStreams[0]);
+      }
+
+      if (textureStreamMap.size() > 0)
+      {
+        objImporter->SetTextureStreams(textureStreamMap);
+      }
     }
 
-    vtkNew<vtkF3DGenericImporter> genericImporter;
-    genericImporter->SetInternalReader(vtkReader);
-    importer = genericImporter;
+    log::debug("\nLoading stream");
+    this->Internals->Load({ { filename, importer } });
   }
 
-  log::debug("\nLoading stream");
-  this->Internals->Load({ { "<stream>", importer } });
   return *this;
 }
 

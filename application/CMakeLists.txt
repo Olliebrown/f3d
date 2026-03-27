@@ -3,6 +3,13 @@ function(f3d_create_exec target_name)
   add_executable(${target_name} ${F3D_SOURCE_FILES})
   target_link_libraries(${target_name} PUBLIC libf3d)
 
+  # Optionally include libzip
+  if(F3D_OPTION_LIBZIP AND libzip_FOUND)
+    target_include_directories(${target_name} PUBLIC ${LIBZIP_INCLUDE_DIRS})
+    target_link_libraries(${target_name} PRIVATE libzip::zip)
+    target_compile_definitions(${target_name} PRIVATE F3D_LIBZIP_ENABLED)
+  endif()
+
   if(UNIX)
     find_package(Threads REQUIRED)
     target_link_libraries(${target_name} PRIVATE Threads::Threads)
@@ -208,6 +215,7 @@ set(F3D_SOURCE_FILES
   ${CMAKE_CURRENT_SOURCE_DIR}/F3DOptionsTools.cxx
   ${CMAKE_CURRENT_SOURCE_DIR}/F3DPluginsTools.cxx
   ${CMAKE_CURRENT_SOURCE_DIR}/F3DStarter.cxx
+  ${CMAKE_CURRENT_SOURCE_DIR}/F3DOBJArchive.cxx
   ${CMAKE_CURRENT_SOURCE_DIR}/F3DSystemTools.cxx
   ${CMAKE_CURRENT_SOURCE_DIR}/main.cxx
 )

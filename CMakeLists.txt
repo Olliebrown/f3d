@@ -127,6 +127,13 @@ if (F3D_USE_EXTERNAL_CLIP)
   find_package(clip REQUIRED)
 endif ()
 
+# Other options
+option(F3D_OPTION_LIBZIP "Support for models in archive files via libzip" OFF)
+
+if (F3D_OPTION_LIBZIP)
+  find_package(libzip REQUIRED)
+endif()
+
 # Shared options between application and library
 include(GNUInstallDirs)
 cmake_dependent_option(F3D_WINDOWS_BUILD_CONSOLE_APPLICATION "Build a supplemental f3d-console application" OFF "WIN32" OFF)
@@ -341,6 +348,7 @@ f3d_report_variable(F3D_MODULE_EXR)
 f3d_report_variable(F3D_MODULE_RAYTRACING)
 f3d_report_variable(F3D_MODULE_UI)
 f3d_report_variable(F3D_MODULE_WEBP)
+f3d_report_variable(F3D_OPTION_LIBZIP)
 f3d_report_variable(F3D_PLUGIN_BUILD_ALEMBIC)
 f3d_report_variable(F3D_PLUGIN_BUILD_ASSIMP)
 f3d_report_variable(F3D_PLUGIN_BUILD_DRACO)

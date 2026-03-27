@@ -33,6 +33,8 @@
 #include "tinyfiledialogs.h"
 #endif
 
+#include "F3DOBJArchive.h"
+
 #include "engine.h"
 #include "interactor.h"
 #include "log.h"
@@ -1636,6 +1638,7 @@ void F3DStarter::LoadFileGroupInternal(
   bool unsupported = false;
 
   std::vector<fs::path> localPaths;
+  std::map<fs::path, F3DOBJArchive*> archiveData;
 
 #if F3D_MODULE_DMON
   // In the main thread, we only need to guard writing
@@ -1725,9 +1728,21 @@ void F3DStarter::LoadFileGroupInternal(
             }
             else
             {
-              f3d::log::warn(tmpPath.string(), " is not a file of a supported file format");
+              // Try to read as an archive instead
+              f3d::log::debug("Trying file '", tmpPath.string(), "' as an archive");
+              if (auto NewArchive = new F3DOBJArchive(tmpPath); NewArchive->IsValid())
+              {
+                f3d::log::debug("Preloaded data from archive");
+                archiveData.emplace(tmpPath, NewArchive);
+                localPaths.emplace_back(tmpPath);
+              }
+              else
+              {
+                delete NewArchive;
+                f3d::log::warn(tmpPath.string(), " is not a file of a supported file format");
+                unsupported = true;
+              }
             }
-            unsupported = true;
           }
         }
         catch (const fs::filesystem_error& ex)
@@ -1779,7 +1794,7 @@ void F3DStarter::LoadFileGroupInternal(
         try
         {
           // Add buffer to the scene
-          scene.add(this->Internals->PipedBuffer.data(), this->Internals->PipedBuffer.size());
+          scene.add(this->Internals->PipedBuffer.data(), this->Internals->PipedBuffer.size(), "<stdin>");
           this->Internals->LoadedFiles.emplace_back(F3D_PIPED);
         }
         catch (const f3d::scene::load_failure_exception& ex)
@@ -1793,7 +1808,26 @@ void F3DStarter::LoadFileGroupInternal(
         try
         {
           // Add files to the scene
-          scene.add(localPaths);
+          for (const fs::path& tmpPath : paths)
+          {
+            if(archiveData.count(tmpPath) > 0)
+            {
+              // Use data from the archive file
+              // Requires VTK >= 9.6.20260128 which can automatically
+              // detect the archive type from a memory buffer
+              scene.add(archiveData[tmpPath]->DecompressedModelData(),
+                archiveData[tmpPath]->DecompressedMaterialData(),
+                archiveData[tmpPath]->DecompressedTextureData());
+
+              // Place into loaded files manually so it gets processed later
+              this->Internals->LoadedFiles.emplace_back(tmpPath);
+            }
+            else
+            {
+              // Add the file itself
+              scene.add(tmpPath);
+            }
+          }
 
           if (this->Internals->AppOptions.AnimationTime.has_value())
           {

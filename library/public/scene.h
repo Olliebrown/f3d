@@ -37,6 +37,12 @@ class F3D_EXPORT scene
 {
 public:
   /**
+   * A special tuple that unifies file contents as a memory buffer, its
+   * size in bytes, and the name of the file it came from.
+   */
+  using bufferTuple = std::tuple<const std::byte*, size_t, std::string>;
+
+  /**
    * An exception that can be thrown by the scene
    * when it failed to load a file for some reason.
    */
@@ -50,8 +56,8 @@ public:
   /**
    * Add and load provided files into the scene
    * Already added file will NOT be reloaded
-   * If it fails to loads a file, it clears the scene and
-   * throw a load_failure_exception.
+   * If it fails to load any one file, it clears the scene and
+   * throws a load_failure_exception.
    * On other failure, throw a load_failure_exception.
    */
   virtual scene& add(const std::filesystem::path& filePath) = 0;
@@ -68,14 +74,17 @@ public:
   virtual scene& add(const mesh_t& mesh) = 0;
 
   /**
-   * Add and load provided buffer into the scene as it was file.
+   * Add and load provided buffers into the scene as if they were files.
    * Automatically picks the right reader to use, unless you use
    * VTK < 9.6.20260128, then it requires the use of `scene.force_reader`.
-   * If it fails to loads the buffer, it clears the scene and
-   * throw a load_failure_exception.
+   * If it fails to load any buffer, it clears the scene and throws a
+   * load_failure_exception.
    * On other failure, throw a load_failure_exception.
    */
-  virtual scene& add(const std::byte* buffer, std::size_t size) = 0;
+  virtual scene& add(const std::byte* buffer, size_t size, std::string filename) = 0;
+  virtual scene& add(std::vector<bufferTuple> buffers) = 0;
+  virtual scene& add(std::vector<bufferTuple> modelBuffers,
+    std::vector<bufferTuple> materialBuffers, std::vector<bufferTuple> textureBuffers) = 0;
 
   ///@{
   /**
