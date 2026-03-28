@@ -498,6 +498,11 @@ Apply an elevation transformation to the camera, in degrees, added after other c
 
 Set the camera to use the orthographic projection. Model-specified by default.
 
+### `--camera-orbit` (_double_)
+
+Create a default camera orbit animation that spins around the central object in the scene.
+Specify duration of orbit in seconds.
+
 ## Raytracing options
 
 ### `-r`, `--raytracing` (_bool_, default: `false`)

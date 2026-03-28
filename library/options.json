@@ -29,6 +29,9 @@
       },
       "orthographic": {
         "type": "bool"
+      },
+      "orbit": {
+        "type": "double"
       }
     },
     "force_reader": {

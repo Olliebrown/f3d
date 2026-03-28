@@ -85,6 +85,7 @@ static inline const std::map<std::string_view, std::string_view> LibOptionsNames
   { "edges", "render.show_edges" },
   { "armature", "render.armature.enable" },
   { "camera-index", "scene.camera.index" },
+  { "camera-orbit", "scene.camera.orbit" },
   { "interaction-style", "interactor.style" },
   { "invert-zoom", "interactor.invert_zoom" },
   { "animation-autoplay", "scene.animation.autoplay" },

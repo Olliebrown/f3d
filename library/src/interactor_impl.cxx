@@ -1183,6 +1183,22 @@ interactor& interactor_impl::initCommands()
     command_documentation_t{ "azimuth_camera value", "tilt the camera right or left" });
 
   this->addCommand(
+    "orbit",
+    [&](const std::vector<std::string>& args)
+    {
+      check_args(args, 0, "orbit");
+      if (!this->Internals->Options.scene.camera.orbit.has_value() || this->Internals->Options.scene.camera.orbit.value() <= 0.0)
+      {
+        this->Internals->Options.setAsString("scene.camera.orbit", "3.263");
+      }
+      else
+      {
+        this->Internals->Options.setAsString("scene.camera.orbit", "0.0");
+      }
+    },
+    command_documentation_t{ "orbit", "toggle camera orbit on or off." });
+
+  this->addCommand(
     "increase_light_intensity",
     [&](const std::vector<std::string>&) { this->Internals->IncreaseLightIntensity(false); },
     command_documentation_t{ "increase_light_intensity", "increase light intensity" });
@@ -1743,6 +1759,7 @@ interactor& interactor_impl::initBindings()
   this->addBinding({mod_t::ANY, "7"}, "set_camera top", "Camera", std::bind(docStr, "Top View camera"));
   this->addBinding({mod_t::ANY, "8"}, "elevation_camera 90", "Camera", std::bind(docStr, "Rotate camera up"));
   this->addBinding({mod_t::ANY, "9"}, "set_camera isometric", "Camera", std::bind(docStr, "Isometric View camera"));
+  this->addBinding({mod_t::ANY, "Slash"}, "orbit","Camera", std::bind(docTglOpt, "Toggle Camera Orbit", std::cref(opts.scene.camera.orbit)), f3d::interactor::BindingType::TOGGLE);
   this->addBinding({mod_t::CTRL, "Y"}, "set scene.up_direction +Y", "Scene", std::bind(docStr, "Set scene up direction to +Y"));
   this->addBinding({mod_t::CTRL, "Z"}, "set scene.up_direction +Z", "Scene", std::bind(docStr, "Set scene up direction to +Z"));
 #if F3D_MODULE_UI

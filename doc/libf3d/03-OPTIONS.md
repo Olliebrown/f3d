@@ -53,6 +53,13 @@ The default scene always uses automatic camera.
 
 CLI: `--camera-index`.
 
+### `scene.camera.orbit` (_double_, optional)
+
+Create a default camera orbit animation that spins around the central object in the scene.
+Specify duration of orbit in seconds. Values <= 0 disable the orbit.
+
+CLI: `--camera-orbit`.
+
 ### `scene.up_direction` (_direction_, default: `+Y`)
 
 Define the Up direction. It impacts the grid, the axis, the HDRI and the camera.
