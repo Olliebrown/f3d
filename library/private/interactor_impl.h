@@ -74,6 +74,11 @@ public:
   bool isPlayingAnimation() override;
   interactor::AnimationDirection getAnimationDirection() override;
 
+  interactor& toggleCameraOrbit() override;
+  interactor& startCameraOrbit() override;
+  interactor& stopCameraOrbit() override;
+  bool isOrbiting() override;
+
   interactor& enableCameraMovement() override;
   interactor& disableCameraMovement() override;
 

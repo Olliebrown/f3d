@@ -268,6 +268,16 @@ public:
   [[nodiscard]] virtual interactor::AnimationDirection getAnimationDirection() = 0;
   ///@}
 
+  ///@{ @name Camera Orbiting
+  /**
+   * Control automatic camera orbiting.
+   */
+  virtual interactor& toggleCameraOrbit() = 0;
+  virtual interactor& startCameraOrbit() = 0;
+  virtual interactor& stopCameraOrbit() = 0;
+  [[nodiscard]] virtual bool isOrbiting() = 0;
+  ///@}
+
   ///@{ @name Movement
   /**
    * Control if camera movements are enabled, which they are by default.

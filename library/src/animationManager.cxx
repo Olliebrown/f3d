@@ -21,6 +21,9 @@
 #include <functional>
 #include <numeric>
 
+constexpr double PI = 3.14159265358979323846;
+constexpr double TWO_PI = PI * 2.0;
+
 namespace f3d::detail
 {
 //----------------------------------------------------------------------------
@@ -167,6 +170,30 @@ void animationManager::ToggleAnimation()
 }
 
 //----------------------------------------------------------------------------
+void animationManager::ToggleCameraOrbit()
+{
+    this->Orbiting = !this->Orbiting;
+}
+
+//----------------------------------------------------------------------------
+void animationManager::StartCameraOrbit()
+{
+  if (!this->Orbiting)
+  {
+    this->ToggleCameraOrbit();
+  }
+}
+
+//----------------------------------------------------------------------------
+void animationManager::StopCameraOrbit()
+{
+  if (this->Orbiting)
+  {
+    this->ToggleCameraOrbit();
+  }
+}
+
+//----------------------------------------------------------------------------
 void animationManager::Tick()
 {
   assert(this->DeltaTime > 0);
@@ -189,6 +216,61 @@ void animationManager::Tick()
     if (this->LoadAtTime(this->CurrentTime))
     {
       this->Window.render();
+    }
+  }
+
+  if (this->Orbiting)
+  {
+    if (this->Options.scene.camera.orbit.has_value() && fabs(this->Options.scene.camera.orbit.value()) > 1e-6)
+    {
+      // Compute amount of change
+      const double percentChange = this->DeltaTime / this->Options.scene.camera.orbit.value();
+
+      // Get camera location and focus
+      camera& cam = this->Window.getCamera();
+      const point3_t camFocus = cam.getFocalPoint();
+      const point3_t camCurPos = cam.getPosition();
+      const point3_t relCamPos = {
+        camCurPos[0] - camFocus[0],
+        camCurPos[1] - camFocus[1],
+        camCurPos[2] - camFocus[2]
+      };
+
+      // Compute camera location in spherical coordinates
+      if (const double radius = sqrt(vtkMath::Distance2BetweenPoints(camFocus, camCurPos));
+        radius > 1e-6)
+      {
+        double theta = atan2(relCamPos[2], relCamPos[0]);
+        const double phi = acos(std::clamp(-relCamPos[1]/radius, -1.0, 1.0));
+
+        // Adjust theta for orbit
+        theta += (percentChange * this->SpeedFactor) * TWO_PI;
+        while (theta > PI) { theta -= TWO_PI; }
+        while (theta < -PI) { theta -= TWO_PI; }
+
+        // Log change for debugging
+        f3d::log::debug("Orbiting to:", vtkMath::DegreesFromRadians(theta));
+
+        // Back to cartesian coordinates
+        const double sinPhi = sin(phi);
+        const double cosPhi = cos(phi);
+        const double cosTheta = cos(theta);
+        const double sinTheta = sin(theta);
+        const point3_t newRelCamPos = {
+          radius * sinPhi * cosTheta,
+          -radius * cosPhi,
+          radius * sinPhi * sinTheta
+        };
+
+        // Assign back to camera
+        cam.setPosition({
+          newRelCamPos[0] + camFocus[0],
+          newRelCamPos[1] + camFocus[1],
+          newRelCamPos[2] + camFocus[2]
+        });
+
+        this->Window.render();
+      }
     }
   }
 }

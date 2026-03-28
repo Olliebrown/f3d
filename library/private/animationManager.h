@@ -76,6 +76,13 @@ public:
   void CycleAnimation();
 
   /**
+   * Start/Stop camera orbit
+   */
+  void ToggleCameraOrbit();
+  void StartCameraOrbit();
+  void StopCameraOrbit();
+
+  /**
    * Return the animation name of a given animation index, if any.
    *
    * Specific animation (0..availableAnimations): Returns the name of the animation at that index
@@ -113,6 +120,14 @@ public:
   bool IsPlaying() const
   {
     return Playing;
+  }
+
+  /**
+   * Return true if the animation manager is orbiting the camera
+   */
+  bool IsOrbiting() const
+  {
+    return Orbiting;
   }
 
   /**
@@ -200,6 +215,7 @@ private:
   vtkNew<vtkDoubleArray> AnimationTimeSteps;
   double TimeRange[2] = { 0.0, 0.0 };
   bool Playing = false;
+  bool Orbiting = false;
   double CurrentTime = 0;
   double DeltaTime = 0;
   bool CurrentTimeSet = false;

@@ -1190,10 +1190,12 @@ interactor& interactor_impl::initCommands()
       if (!this->Internals->Options.scene.camera.orbit.has_value() || this->Internals->Options.scene.camera.orbit.value() <= 0.0)
       {
         this->Internals->Options.setAsString("scene.camera.orbit", "3.263");
+        this->startCameraOrbit();
       }
       else
       {
         this->Internals->Options.setAsString("scene.camera.orbit", "0.0");
+        this->stopCameraOrbit();
       }
     },
     command_documentation_t{ "orbit", "toggle camera orbit on or off." });
@@ -2039,6 +2041,37 @@ bool interactor_impl::isPlayingAnimation()
 {
   assert(this->Internals->AnimationManager);
   return this->Internals->AnimationManager->IsPlaying();
+}
+
+//----------------------------------------------------------------------------
+interactor& interactor_impl::toggleCameraOrbit()
+{
+  assert(this->Internals->AnimationManager);
+  this->Internals->AnimationManager->ToggleCameraOrbit();
+  return *this;
+}
+
+//----------------------------------------------------------------------------
+interactor& interactor_impl::startCameraOrbit()
+{
+  assert(this->Internals->AnimationManager);
+  this->Internals->AnimationManager->StartCameraOrbit();
+  return *this;
+}
+
+//----------------------------------------------------------------------------
+interactor& interactor_impl::stopCameraOrbit()
+{
+  assert(this->Internals->AnimationManager);
+  this->Internals->AnimationManager->StopCameraOrbit();
+  return *this;
+}
+
+//----------------------------------------------------------------------------
+bool interactor_impl::isOrbiting()
+{
+  assert(this->Internals->AnimationManager);
+  return this->Internals->AnimationManager->IsOrbiting();
 }
 
 //----------------------------------------------------------------------------
