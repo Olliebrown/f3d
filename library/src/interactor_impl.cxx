@@ -647,9 +647,11 @@ public:
       this->CommandBuffer.reset();
     }
 
+    // Update scene animation and/or camera orbit
     this->AnimationManager->SetDeltaTime(deltaTime);
-    this->AnimationManager->Tick();
+    const bool animRequestRender = this->AnimationManager->Tick();
 
+    // Update renderer time arguments
     vtkRenderWindow* renWin = this->Window.GetRenderWindow();
     vtkF3DRenderer* ren = vtkF3DRenderer::SafeDownCast(renWin->GetRenderers()->GetFirstRenderer());
     ren->SetUIDeltaTime(deltaTime);
@@ -657,10 +659,10 @@ public:
 
     // Determine if we need a full render or just a UI render
     // At the moment, only TAA requires a full render each frame
-    bool forceRender = (this->Options.render.effect.antialiasing.enable &&
+    const bool forceRender = (this->Options.render.effect.antialiasing.enable &&
       this->Options.render.effect.antialiasing.mode == "taa");
 
-    if (this->RenderRequested || forceRender)
+    if (this->RenderRequested || animRequestRender || forceRender)
     {
       this->Window.render();
       this->RenderRequested = false;
@@ -1189,7 +1191,7 @@ interactor& interactor_impl::initCommands()
       check_args(args, 0, "orbit");
       if (!this->Internals->Options.scene.camera.orbit.has_value() || this->Internals->Options.scene.camera.orbit.value() <= 0.0)
       {
-        this->Internals->Options.setAsString("scene.camera.orbit", "3.263");
+        this->Internals->Options.setAsString("scene.camera.orbit", "6.283");
         this->startCameraOrbit();
       }
       else

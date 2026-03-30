@@ -24,6 +24,94 @@
 constexpr double PI = 3.14159265358979323846;
 constexpr double TWO_PI = PI * 2.0;
 
+// Non-standard sign of a number (treating 0 as 1 and -0 as -1)
+template <typename T> T strictSign(T val)
+{
+  if (std::signbit(val)) { return -1; }
+  return 1;
+}
+
+f3d::vector3_t getCamUpPrincipleAxes(const f3d::vector3_t& camUp)
+{
+  // Locate the highest magnitude element (index) as the "up" axis
+  const auto maxUpElem = std::max_element(camUp.begin(), camUp.end(),
+    [](const double A, const double B) {
+        return std::abs(A) < std::abs(B);
+    });
+  const int maxUpIndex = std::distance(camUp.begin(), maxUpElem);
+  const bool upIsNeg = (camUp[maxUpIndex] < 0);
+
+  // Debugging output
+  // char upAxisName = 'X';
+  // if (maxUpIndex == 1) { upAxisName = 'Y'; }
+  // else if (maxUpIndex == 2) { upAxisName = 'Z'; }
+  // f3d::log::debug("Up Axis: ", (upIsNeg ? "-" : ""), upAxisName);
+
+  // Determine coordinate sys orientation from up axis
+  f3d::vector3_t axisOut = {};
+  switch (maxUpIndex)
+  {
+    default:
+    case 0:
+      if (upIsNeg) axisOut = { -2.0, 1.0, 0.0 };
+      else axisOut = { 2.0, 1.0, -0.0 };
+      break;
+
+    case 1:
+      if (upIsNeg) axisOut = { 0.0, -2.0, 1.0 };
+      else axisOut = { 0.0, 2.0, -1.0 };
+      break;
+
+    case 2:
+      if (upIsNeg) axisOut = { 0.0, -1.0, 2.0 };
+      else axisOut = { 0.0, 1.0, 2.0 };
+      break;
+  }
+
+  return axisOut;
+}
+
+f3d::point3_t cartesianToCylindricalForAxis(const f3d::point3_t& point, const f3d::vector3_t& axis)
+{
+  // Remap coordinates using axis
+  const f3d::point3_t localPos = {
+    point[static_cast<int>(std::abs(axis[0]))] * strictSign(axis[0]),
+    point[static_cast<int>(std::abs(axis[1]))] * strictSign(axis[1]),
+    point[static_cast<int>(std::abs(axis[2]))] * strictSign(axis[2]),
+  };
+
+  f3d::log::debug("Pre Cyl coords: (", localPos[0], ", ", localPos[1], ", ", localPos[2], ")");
+
+  // Convert to cylindrical coordinates (along local +Z)
+  const double radius = sqrt(localPos[0] * localPos[0] + localPos[1] * localPos[1]);
+  if (radius > 1e-6)
+  {
+    // Adjust theta for orbit
+    const double theta = atan2(localPos[1], localPos[0]);
+    return { radius, theta, localPos[2] };
+  }
+
+  // If radius is too small, leave theta as 0.0
+  return { radius, 0.0, localPos[2] };
+}
+
+f3d::point3_t cylindricalToCartesianForAxis(const f3d::point3_t& point, const f3d::vector3_t& axis)
+{
+  // Back to cartesian coordinates
+  const f3d::point3_t localPos = {
+    point[0] * cos(point[1]),
+    point[0] * sin(point[1]),
+    point[2]
+  };
+
+  // Remap using axis
+  f3d::point3_t globalPos = {};
+  globalPos[static_cast<int>(std::abs(axis[0]))] = localPos[0] * strictSign(axis[0]);
+  globalPos[static_cast<int>(std::abs(axis[1]))] = localPos[1] * strictSign(axis[1]);
+  globalPos[static_cast<int>(std::abs(axis[2]))] = localPos[2] * strictSign(axis[2]);
+  return globalPos;
+}
+
 namespace f3d::detail
 {
 //----------------------------------------------------------------------------
@@ -194,85 +282,103 @@ void animationManager::StopCameraOrbit()
 }
 
 //----------------------------------------------------------------------------
-void animationManager::Tick()
+bool animationManager::Tick()
 {
   assert(this->DeltaTime > 0);
+  bool updateNeeded = false;
   if (this->Playing)
   {
-    this->CurrentTime += (this->DeltaTime * this->SpeedFactor) * this->AnimationDirection;
-
-    // Modulo computation, compute CurrentTime in the time range.
-    if (this->CurrentTime < this->TimeRange[0] || this->CurrentTime > this->TimeRange[1])
-    {
-      auto modulo = [](double val, double mod)
-      {
-        const double remainder = fmod(val, mod);
-        return remainder < 0 ? remainder + mod : remainder;
-      };
-      this->CurrentTime = this->TimeRange[0] +
-        modulo(this->CurrentTime - this->TimeRange[0], this->TimeRange[1] - this->TimeRange[0]);
-    }
-
-    if (this->LoadAtTime(this->CurrentTime))
-    {
-      this->Window.render();
-    }
+    updateNeeded = updateNeeded || this->TickAnimation();
   }
 
-  if (this->Orbiting)
+  if (this->Orbiting && this->Options.scene.camera.orbit.has_value() && fabs(this->Options.scene.camera.orbit.value()) > 1e-6)
   {
-    if (this->Options.scene.camera.orbit.has_value() && fabs(this->Options.scene.camera.orbit.value()) > 1e-6)
-    {
-      // Compute amount of change
-      const double percentChange = this->DeltaTime / this->Options.scene.camera.orbit.value();
-
-      // Get camera location and focus
-      camera& cam = this->Window.getCamera();
-      const point3_t camFocus = cam.getFocalPoint();
-      const point3_t camCurPos = cam.getPosition();
-      const point3_t relCamPos = {
-        camCurPos[0] - camFocus[0],
-        camCurPos[1] - camFocus[1],
-        camCurPos[2] - camFocus[2]
-      };
-
-      // Compute camera location in spherical coordinates
-      if (const double radius = sqrt(vtkMath::Distance2BetweenPoints(camFocus, camCurPos));
-        radius > 1e-6)
-      {
-        double theta = atan2(relCamPos[2], relCamPos[0]);
-        const double phi = acos(std::clamp(-relCamPos[1]/radius, -1.0, 1.0));
-
-        // Adjust theta for orbit
-        theta += (percentChange * this->SpeedFactor) * TWO_PI;
-        while (theta > PI) { theta -= TWO_PI; }
-        while (theta < -PI) { theta -= TWO_PI; }
-
-        // Log change for debugging
-        f3d::log::debug("Orbiting to:", vtkMath::DegreesFromRadians(theta));
-
-        // Back to cartesian coordinates
-        const double sinPhi = sin(phi);
-        const double cosPhi = cos(phi);
-        const double cosTheta = cos(theta);
-        const double sinTheta = sin(theta);
-        const point3_t newRelCamPos = {
-          radius * sinPhi * cosTheta,
-          -radius * cosPhi,
-          radius * sinPhi * sinTheta
-        };
-
-        // Assign back to camera
-        cam.setPosition({
-          newRelCamPos[0] + camFocus[0],
-          newRelCamPos[1] + camFocus[1],
-          newRelCamPos[2] + camFocus[2]
-        });
-
-        this->Window.render();
-      }
-    }
+    updateNeeded = updateNeeded || this->TickCameraOrbit();
   }
+
+  return updateNeeded;
+}
+
+bool animationManager::TickAnimation()
+{
+  // Update animation time
+  this->CurrentTime += (this->DeltaTime * this->SpeedFactor) * this->AnimationDirection;
+
+  // Modulo computation, compute CurrentTime in the time range.
+  if (this->CurrentTime < this->TimeRange[0] || this->CurrentTime > this->TimeRange[1])
+  {
+    auto modulo = [](double val, double mod)
+    {
+      const double remainder = fmod(val, mod);
+      return remainder < 0 ? remainder + mod : remainder;
+    };
+    this->CurrentTime = this->TimeRange[0] +
+      modulo(this->CurrentTime - this->TimeRange[0], this->TimeRange[1] - this->TimeRange[0]);
+  }
+
+  // Advance the animation
+  return this->LoadAtTime(this->CurrentTime);
+}
+
+bool animationManager::TickCameraOrbit()
+{
+  // Get camera location and focus
+  camera& cam = this->Window.getCamera();
+  const point3_t camFocus = cam.getFocalPoint();
+  const point3_t camCurPos = cam.getPosition();
+  const point3_t reCenteredCamPos = {
+    camCurPos[0] - camFocus[0],
+    camCurPos[1] - camFocus[1],
+    camCurPos[2] - camFocus[2]
+  };
+
+  // Compute principle axes of camera view (from the camera "up" axis)
+  const vector3_t camUp = cam.getViewUp();
+  const vector3_t axis = getCamUpPrincipleAxes(cam.getViewUp());
+
+  // Compute camera location in cylindrical coordinates around the given principle axes
+  f3d::log::debug("Global coords: (", reCenteredCamPos[0], ", ", reCenteredCamPos[1], ", ", -reCenteredCamPos[2], ")");
+  if (point3_t cylinderCoords = cartesianToCylindricalForAxis(reCenteredCamPos, axis);
+    std::abs(cylinderCoords[0]) > 1e-6)
+  {
+    f3d::log::debug("    > Cylinder: ", cylinderCoords[0], "r, ", vtkMath::DegreesFromRadians(cylinderCoords[1]), "deg, ", cylinderCoords[2]);
+    const double oldTheta = cylinderCoords[1];
+
+    // adjust the theta angle to orbit (we subtract to get more natural rotation direction)
+    const double percentChange = this->DeltaTime / this->Options.scene.camera.orbit.value();
+    cylinderCoords[1] -= percentChange * this->SpeedFactor * TWO_PI;
+    while (cylinderCoords[1] > PI) { cylinderCoords[1] -= TWO_PI; }
+    while (cylinderCoords[1] < -PI) { cylinderCoords[1] += TWO_PI; }
+
+    // Back to cartesian coordinates
+    const point3_t newCamPos = cylindricalToCartesianForAxis(cylinderCoords, axis);
+    cam.setPosition({
+      newCamPos[0] + camFocus[0],
+      newCamPos[1] + camFocus[1],
+      newCamPos[2] + camFocus[2]
+    });
+
+    // New viewing vector
+    vector3_t newView = {
+      camFocus[0] - cam.getPosition()[0],
+      camFocus[1] - cam.getPosition()[1],
+      camFocus[2] - cam.getPosition()[2]
+    };
+    vtkMath::Normalize(newView.data());
+
+    // Re-compute proper co-linear axes
+    vector3_t newRight = {};
+    vtkMath::Cross(newView, cam.getViewUp(), newRight);
+
+    vector3_t newUp = {};
+    vtkMath::Cross(newRight, newView, newUp);
+
+    cam.setViewUp(newUp);
+
+    return true;
+  }
+
+  return false;
 }
 
 //----------------------------------------------------------------------------

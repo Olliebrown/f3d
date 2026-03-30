@@ -136,10 +136,24 @@ public:
   void SetDeltaTime(double deltaTime);
 
   /**
-   * Advance animationTime of deltaTime and call loadAtTime accordingly
-   * Do nothing if IsPlaying is false
+   * Attempt to advance animation and orbit camera.
+   * Returns true if render is needed, false otherwise.
    */
-  void Tick();
+  bool Tick();
+
+  /**
+   * Advance animationTime of deltaTime and call loadAtTime accordingly.
+   * Do nothing if IsPlaying is false.
+   * Returns true if render is needed, false otherwise.
+   */
+  bool TickAnimation();
+
+  /**
+   * Advance camera orbit by deltaTime.
+   * Do nothing if Orbiting is false or scene.camera.orbit is nearly 0.0.
+   * Returns true if render is needed, false otherwise.
+   */
+  bool TickCameraOrbit();
 
   /**
    * Load animation at provided time value
